@@ -8,17 +8,19 @@ class WindowsLauncherTests(unittest.TestCase):
     def test_launchers_exist_and_use_windows_python(self):
         start = (ROOT / "启动减脂仪表盘.bat").read_text(encoding="utf-8")
         stop = (ROOT / "停止减脂仪表盘.bat").read_text(encoding="utf-8")
-        start_ps = (ROOT / "启动减脂仪表盘.ps1").read_text(encoding="utf-8")
-        stop_ps = (ROOT / "停止减脂仪表盘.ps1").read_text(encoding="utf-8")
-        self.assertIn("启动减脂仪表盘.ps1", start)
+        start_ps = (ROOT / "dashboard-start.ps1").read_text(encoding="utf-8")
+        stop_ps = (ROOT / "dashboard-stop.ps1").read_text(encoding="utf-8")
+        self.assertIn("dashboard-start.ps1", start)
         self.assertIn("py.exe", start_ps)
         self.assertIn("backend\\server.py", start_ps)
         self.assertIn("127.0.0.1", start_ps)
         self.assertIn("8765", start_ps)
         self.assertNotIn("wsl", (start + start_ps).lower())
-        self.assertIn("停止减脂仪表盘.ps1", stop)
+        self.assertIn("dashboard-stop.ps1", stop)
         self.assertIn("Get-NetTCPConnection", stop_ps)
         self.assertIn("server\\.py", stop_ps)
+        self.assertTrue((ROOT / "启动减脂仪表盘.bat").read_bytes().isascii())
+        self.assertIn(b"\r\n", (ROOT / "启动减脂仪表盘.bat").read_bytes())
 
     def test_independent_telegram_gateway_is_removed(self):
         self.assertFalse((ROOT / "gateway/telegram_bot.py").exists())

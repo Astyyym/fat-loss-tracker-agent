@@ -5,8 +5,6 @@ foreach ($processId in ($connections | Select-Object -ExpandProperty OwningProce
     if ($process -and $process.CommandLine -match 'server\.py' -and $process.CommandLine -match '8765') {
         Stop-Process -Id $processId -Force
     } else {
-        Add-Type -AssemblyName PresentationFramework
-        [System.Windows.MessageBox]::Show("Port 8765 belongs to another process. PID $processId was not stopped.",'Fat Loss Dashboard') | Out-Null
-        exit 1
+        throw "Port 8765 belongs to another process. PID $processId was not stopped."
     }
 }
