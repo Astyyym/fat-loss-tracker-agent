@@ -1,43 +1,57 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $port = 8765
-$url = "http://127.0.0.1:$port"
+$url = "http://127.0.0.1:$port/"
+$apiUrl = "http://127.0.0.1:$port/api/dashboard"
+$serverLog = Join-Path $root 'dashboard-server.log'
+$serverErrorLog = Join-Path $root 'dashboard-server-error.log'
+
+function Open-Dashboard {
+    Start-Process -FilePath 'explorer.exe' -ArgumentList $url
+}
 
 try {
-    Invoke-WebRequest -UseBasicParsing "$url/api/dashboard" -TimeoutSec 2 | Out-Null
-    Start-Process $url
+    Invoke-WebRequest -UseBasicParsing $apiUrl -TimeoutSec 2 | Out-Null
+    Open-Dashboard
+    Write-Output "Dashboard already running: $url"
     exit 0
 } catch {}
 
 $python = $null
-$arguments = @()
+$prefixArgs = @()
 if (Get-Command py.exe -ErrorAction SilentlyContinue) {
-    $python = 'py.exe'
-    $arguments = @('-3')
+    $python = (Get-Command py.exe).Source
+    $prefixArgs = @('-3')
 } elseif (Get-Command python.exe -ErrorAction SilentlyContinue) {
-    $python = 'python.exe'
+    $python = (Get-Command python.exe).Source
 } else {
-    Add-Type -AssemblyName PresentationFramework
-    [System.Windows.MessageBox]::Show('Windows Python was not found. Install Python 3.11 or newer.','Fat Loss Dashboard') | Out-Null
-    exit 1
+    throw 'Windows Python was not found. Install Python 3.11 or newer and enable the Python launcher.'
 }
 
-$arguments += @('backend\server.py', '--port', $port)
-Start-Process -FilePath $python -ArgumentList $arguments -WorkingDirectory $root -WindowStyle Minimized
+Remove-Item $serverLog -ErrorAction SilentlyContinue
+Remove-Item $serverErrorLog -ErrorAction SilentlyContinue
+$arguments = $prefixArgs + @('backend\server.py', '--port', "$port")
+$process = Start-Process -FilePath $python -ArgumentList $arguments -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput $serverLog -RedirectStandardError $serverErrorLog -PassThru
 
 $ready = $false
-for ($i = 0; $i -lt 40; $i++) {
+for ($i = 0; $i -lt 60; $i++) {
+    if ($process.HasExited) { break }
     try {
-        Invoke-WebRequest -UseBasicParsing "$url/api/dashboard" -TimeoutSec 1 | Out-Null
+        Invoke-WebRequest -UseBasicParsing $apiUrl -TimeoutSec 1 | Out-Null
         $ready = $true
         break
     } catch {
         Start-Sleep -Milliseconds 250
     }
 }
+
 if (-not $ready) {
-    Add-Type -AssemblyName PresentationFramework
-    [System.Windows.MessageBox]::Show('Dashboard failed to start. Check whether port 8765 is occupied.','Fat Loss Dashboard') | Out-Null
-    exit 1
+    $output = if (Test-Path $serverLog) { Get-Content $serverLog -Raw } else { '' }
+    $errors = if (Test-Path $serverErrorLog) { Get-Content $serverErrorLog -Raw } else { '' }
+    $detail = ($output + "`n" + $errors).Trim()
+    if (-not $detail) { $detail = 'No server log was created.' }
+    throw "Dashboard failed to start. $detail"
 }
-Start-Process $url
+
+Open-Dashboard
+Write-Output "Dashboard started: $url"

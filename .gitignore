@@ -16,3 +16,8 @@ cards/*.html
 # Runtime locks and temporary files
 data/.write.lock
 data/.*.tmp
+
+# Local launcher logs
+dashboard-launch.log
+dashboard-server.log
+dashboard-server-error.log
