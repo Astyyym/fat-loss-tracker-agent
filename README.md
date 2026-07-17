@@ -72,6 +72,23 @@ python3 backend/service.py '<用户原文>' --json --no-html
 
 项目本身不包含第二个 Telegram Bot，也不要求重复配置 Telegram Token 或 chat ID。Telegram 的连接和授权由现有 Hermes Gateway 负责。
 
+### 安装附带的 Hermes Skill
+
+仓库内附带公开版 Skill：
+
+```text
+skills/fat-loss-tracker/SKILL.md
+```
+
+将整个 Skill 目录复制到 Hermes 用户技能目录：
+
+```bash
+mkdir -p ~/.hermes/skills/productivity
+cp -r skills/fat-loss-tracker ~/.hermes/skills/productivity/
+```
+
+随后在 Hermes CLI 或 Gateway 中开启新会话，使 Skill 重新加载。公开版 Skill 不包含维护者本地路径；它会优先使用当前项目工作区，找不到项目时会要求用户提供克隆目录。
+
 ## 启动网页仪表盘
 
 ### Windows 双击启动
@@ -167,6 +184,7 @@ data/                    本地事件数据（Git 忽略）
 summaries/ cards/        本地派生视图（Git 忽略）
 backups/                 本地滚动备份（Git 忽略）
 tests/                   自动化测试
+skills/fat-loss-tracker/ 可安装的公开 Hermes Skill
 ```
 
 ## 参考项目与链接
