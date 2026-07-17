@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>四周减脂记录</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div><p class="eyebrow">LOCAL DASHBOARD</p><h1>四周减脂记录</h1></div>
+    <button id="refresh" type="button">刷新数据</button>
+  </header>
+  <main>
+    <section id="status" class="status" aria-live="polite">正在读取后端汇总…</section>
+    <section class="today-section">
+      <h2>今日</h2>
+      <div class="metrics">
+        <article><span>热量</span><strong id="calories">—</strong><small id="calorie-gap">/ 1800 kcal</small></article>
+        <article><span>蛋白质</span><strong id="protein">—</strong><small id="protein-gap">/ 130g</small></article>
+        <article><span>运动</span><strong id="exercise">—</strong><small id="today-date">—</small></article>
+      </div>
+      <div id="meals" class="meals"></div>
+      <p id="judgement" class="judgement"></p>
+    </section>
+    <section>
+      <h2>最近 7 天</h2>
+      <div class="table-wrap"><table><thead><tr><th>日期</th><th>热量</th><th>蛋白质</th><th>运动</th><th>体重</th><th>状态</th></tr></thead><tbody id="week-table"></tbody></table></div>
+    </section>
+    <section>
+      <h2>最近 14 天趋势</h2>
+      <div class="charts">
+        <article><h3>热量 / kcal</h3><svg id="calorie-chart" viewBox="0 0 640 220" role="img"></svg></article>
+        <article><h3>蛋白质 / g</h3><svg id="protein-chart" viewBox="0 0 640 220" role="img"></svg></article>
+        <article><h3>体重 7 天移动平均 / kg</h3><svg id="weight-chart" viewBox="0 0 640 220" role="img"></svg></article>
+      </div>
+    </section>
+  </main>
+  <footer><span id="updated">数据最后更新时间：—</span><span id="source">当前数据源文件：—</span></footer>
+  <script src="app.js"></script>
+</body>
+</html>

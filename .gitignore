@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Secrets / local environment
+.env
+.env.*
+
+# Runtime health data and derived private views
+data/*.jsonl
+backups/**/*.jsonl
+summaries/*.md
+cards/*.html
+
+# Runtime locks and temporary files
+data/.write.lock
+data/.*.tmp
