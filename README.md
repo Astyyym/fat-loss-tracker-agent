@@ -9,7 +9,7 @@
 - JSONL 追加式事件：历史记录不会被静默覆盖
 - `request_id` 幂等、重复记录提示和跨年纠错
 - 原子写入、项目内备份、损坏行安全报错
-- Windows / WSL 均可运行
+- 支持 Windows 与 Linux / WSL；Windows 一键脚本已提供，完整无 WSL 实机验收状态见下文
 - localhost 只读仪表盘，无 npm、数据库或外部 CDN
 
 ## 配置周期和目标
@@ -46,6 +46,12 @@ cp config.example.json config.json
 `program_weeks` 可设置为 1–104。`config.json` 属于本地个人配置，已被 Git 忽略；公开仓库只包含 `config.example.json`。
 
 不创建 `config.json` 时使用示例中的默认值。
+
+## 正式源码位置与环境
+
+本项目应只保留一个权威源码目录。维护者当前以 Windows D 盘目录作为正式源码位置，WSL 通过 `/mnt/d/` 访问的是同一份文件，不是第二个项目副本。其他用户可以将仓库克隆到任意目录；公开代码和 Skill 不依赖维护者路径。
+
+不要在 Windows 与 WSL home 中各保留一份可分别修改的仓库。跨环境操作应指向同一工作区，或通过 Git 明确迁移后只保留一个主副本。
 
 ## Hermes 接入
 
@@ -110,6 +116,10 @@ cp -r skills/fat-loss-tracker ~/.hermes/skills/productivity/
 ```
 
 要求安装 Python 3.11 或更高版本。
+
+启动器会把本地诊断日志写入 `runtime/logs/`。该目录已被 Git 忽略，不会上传到公开仓库。
+
+> Windows 脚本结构与自动化测试已经覆盖；在一台完全没有 WSL 的全新 Windows 环境完成启动、浏览器打开、停止和端口释放的整套验收前，不把它描述为已经完成所有 Windows 实机场景验证。
 
 ### 手动启动
 
@@ -183,8 +193,11 @@ config.example.json      可复制的公开配置示例
 data/                    本地事件数据（Git 忽略）
 summaries/ cards/        本地派生视图（Git 忽略）
 backups/                 本地滚动备份（Git 忽略）
+runtime/logs/             本地启动诊断日志（Git 忽略）
 tests/                   自动化测试
 skills/fat-loss-tracker/ 可安装的公开 Hermes Skill
+docs/需求/               当前版本需求与开发边界
+开发短计划/              当前计划与历史完成记录
 ```
 
 ## 参考项目与链接

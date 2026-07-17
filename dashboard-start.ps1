@@ -3,8 +3,10 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $port = 8765
 $url = "http://127.0.0.1:$port/"
 $apiUrl = "http://127.0.0.1:$port/api/dashboard"
-$serverLog = Join-Path $root 'dashboard-server.log'
-$serverErrorLog = Join-Path $root 'dashboard-server-error.log'
+$logDir = Join-Path $root 'runtime\logs'
+New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+$serverLog = Join-Path $logDir 'dashboard-server.log'
+$serverErrorLog = Join-Path $logDir 'dashboard-server-error.log'
 
 function Open-Dashboard {
     Start-Process -FilePath 'explorer.exe' -ArgumentList $url

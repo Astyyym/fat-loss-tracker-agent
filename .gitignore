@@ -17,7 +17,5 @@ cards/*.html
 data/.write.lock
 data/.*.tmp
 
-# Local launcher logs
-dashboard-launch.log
-dashboard-server.log
-dashboard-server-error.log
+# Local runtime state and launcher logs
+runtime/
