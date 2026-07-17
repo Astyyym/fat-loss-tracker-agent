@@ -48,8 +48,8 @@ backend/service.py
 
 调用示例：
 
-```bash
-python3 backend/service.py '<用户原文>' --json --no-html
+```bat
+py -3 backend\service.py "<用户原文>" --json --no-html
 ```
 
 推荐表达：
@@ -106,7 +106,7 @@ python3 backend/service.py '<用户原文>' --json --no-html
 ## 6. 写入安全
 
 - 写入前校验 schema、UUID、日期时间、单位、合理范围和 target_id。
-- 使用跨 Windows/WSL 的项目内排他锁 `data/.write.lock`。
+- 使用项目内排他锁 `data/.write.lock`。
 - 使用项目内临时文件、`fsync` 和原子替换。
 - 替换前在 `backups/YYYY/` 保存滚动备份。
 - JSONL 任意行损坏时停止读取，报告行号并备份损坏文件。
@@ -129,7 +129,7 @@ python3 backend/service.py '<用户原文>' --json --no-html
 
 - `frontend/` 是只读仪表盘。
 - `backend/server.py` 只绑定 `127.0.0.1`。
-- Windows 可双击启动脚本；其他系统直接运行 `python3 backend/server.py`。
+- Windows 可双击启动脚本，也可运行 `py -3 backend\server.py`。
 - 网页展示配置周期、今日、最近7天和独立趋势图。
 - 不使用 LocalStorage 保存业务数据，不使用 npm、React、Vue、外部 CDN、远程字体或数据库。
 - 用户文本必须 HTML 转义，`raw_text` 不直接渲染。

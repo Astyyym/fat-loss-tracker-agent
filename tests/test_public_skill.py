@@ -20,10 +20,16 @@ class PublicSkillTests(unittest.TestCase):
 
     def test_public_skill_has_no_private_absolute_paths(self):
         content = SKILL.read_text(encoding="utf-8")
-        forbidden = ["/mnt/d/", "D:\\wenjian", "/home/czk", "四周减脂记录Agent"]
+        forbidden = [
+            "D:\\wenjian",
+            "/home/czk",
+            "四周减脂记录Agent",
+        ]
         for value in forbidden:
             self.assertNotIn(value, content)
         self.assertIn("<PROJECT_ROOT>", content)
+        self.assertIn("platforms: [windows]", content)
+        self.assertIn("py -3", content)
         self.assertIn("backend/service.py", content)
 
     def test_skill_reuses_existing_gateway_and_service(self):

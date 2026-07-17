@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """单用户减脂记录 Agent 的唯一业务与数据读写入口。仅使用 Python 标准库。"""
 from __future__ import annotations
 
@@ -137,7 +136,7 @@ class CalorieService:
 
     @contextlib.contextmanager
     def _write_lock(self, timeout: float = 15.0, stale_after: float = 120.0):
-        """跨 Windows/WSL 的项目内排他锁，避免依赖 Linux 专用 fcntl。"""
+        """项目内排他锁，避免依赖平台专用锁 API。"""
         deadline = time.monotonic() + timeout
         token = f"{os.getpid()}:{uuid.uuid4().hex}"
         while True:

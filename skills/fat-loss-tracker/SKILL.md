@@ -4,7 +4,7 @@ version: 1.0.0
 description: Use when the user explicitly wants to record or query food, calories, protein, exercise, weight, waist, corrections, daily summaries, weekly reviews, or trends through the local fat-loss-tracker-agent project. Reuses the existing Hermes Gateway and routes requests to backend/service.py.
 author: Astyyym
 license: MIT
-platforms: [linux, windows]
+platforms: [windows]
 metadata:
   hermes:
     tags: [health-log, nutrition, exercise, jsonl, local-project]
@@ -47,12 +47,6 @@ Before invoking the service, locate the cloned repository root using this order:
 Set the discovered absolute directory as `<PROJECT_ROOT>` for the current invocation only.
 
 ## Invocation
-
-### Linux / WSL / macOS-style Python
-
-```bash
-python3 "<PROJECT_ROOT>/backend/service.py" "<USER_TEXT>" --json --no-html
-```
 
 ### Windows Python
 

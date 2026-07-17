@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """仅绑定 localhost 的只读仪表盘服务器。"""
 from __future__ import annotations
 

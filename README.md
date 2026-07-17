@@ -9,23 +9,15 @@
 - JSONL 追加式事件：历史记录不会被静默覆盖
 - `request_id` 幂等、重复记录提示和跨年纠错
 - 原子写入、项目内备份、损坏行安全报错
-- 支持 Windows 与 Linux / WSL；Windows 一键脚本已提供，完整无 WSL 实机验收状态见下文
+- 面向 Windows 本地运行，提供一键启动和停止脚本
 - localhost 只读仪表盘，无 npm、数据库或外部 CDN
 
 ## 配置周期和目标
 
 复制示例配置：
 
-### Windows
-
 ```bat
 copy config.example.json config.json
-```
-
-### Linux / WSL
-
-```bash
-cp config.example.json config.json
 ```
 
 编辑 `config.json`：
@@ -49,16 +41,14 @@ cp config.example.json config.json
 
 ## 正式源码位置与环境
 
-本项目应只保留一个权威源码目录。维护者当前以 Windows D 盘目录作为正式源码位置，WSL 通过 `/mnt/d/` 访问的是同一份文件，不是第二个项目副本。其他用户可以将仓库克隆到任意目录；公开代码和 Skill 不依赖维护者路径。
-
-不要在 Windows 与 WSL home 中各保留一份可分别修改的仓库。跨环境操作应指向同一工作区，或通过 Git 明确迁移后只保留一个主副本。
+当前版本以 Windows 本地目录作为唯一正式源码位置。不要在其他位置保留可分别修改的重复仓库；需要迁移时通过 Git 完成，并明确唯一主副本。
 
 ## Hermes 接入
 
 Hermes Skill 只需要把用户原文传给项目入口：
 
-```bash
-python3 backend/service.py '<用户原文>' --json --no-html
+```bat
+py -3 backend\service.py "<用户原文>" --json --no-html
 ```
 
 可用表达：
@@ -88,9 +78,8 @@ skills/fat-loss-tracker/SKILL.md
 
 将整个 Skill 目录复制到 Hermes 用户技能目录：
 
-```bash
-mkdir -p ~/.hermes/skills/productivity
-cp -r skills/fat-loss-tracker ~/.hermes/skills/productivity/
+```bat
+xcopy /E /I skills\fat-loss-tracker "%USERPROFILE%\.hermes\skills\productivity\fat-loss-tracker"
 ```
 
 随后在 Hermes CLI 或 Gateway 中开启新会话，使 Skill 重新加载。公开版 Skill 不包含维护者本地路径；它会优先使用当前项目工作区，找不到项目时会要求用户提供克隆目录。
@@ -119,41 +108,33 @@ cp -r skills/fat-loss-tracker ~/.hermes/skills/productivity/
 
 启动器会把本地诊断日志写入 `runtime/logs/`。该目录已被 Git 忽略，不会上传到公开仓库。
 
-> Windows 脚本结构与自动化测试已经覆盖；在一台完全没有 WSL 的全新 Windows 环境完成启动、浏览器打开、停止和端口释放的整套验收前，不把它描述为已经完成所有 Windows 实机场景验证。
+> Windows 脚本结构、服务启动、接口访问、停止和端口释放已经完成验证；不同 Windows 机器上的 Python 安装状态仍可能影响启动。
 
 ### 手动启动
 
-Windows：
-
 ```bat
 py -3 backend\server.py
-```
-
-Linux / WSL：
-
-```bash
-python3 backend/server.py
 ```
 
 服务器固定绑定 `127.0.0.1`，不会自动暴露到局域网或公网。
 
 ## 命令行使用
 
-```bash
-python3 backend/service.py '早餐 标准早餐A'
-python3 backend/service.py '体重 72.4kg，早起空腹'
-python3 backend/service.py '运动 力量A 35分钟 完成'
-python3 backend/service.py '减脂今天'
-python3 backend/service.py '减脂本周复盘'
-python3 backend/service.py '减脂趋势'
-python3 backend/service.py '减脂表格'
+```bat
+py -3 backend\service.py "早餐 标准早餐A"
+py -3 backend\service.py "体重 72.4kg，早起空腹"
+py -3 backend\service.py "运动 力量A 35分钟 完成"
+py -3 backend\service.py "减脂今天"
+py -3 backend\service.py "减脂本周复盘"
+py -3 backend\service.py "减脂趋势"
+py -3 backend\service.py "减脂表格"
 ```
 
 JSON 输出：
 
-```bash
-python3 backend/service.py '减脂今天' --json --no-html
-python3 backend/service.py --dashboard-json
+```bat
+py -3 backend\service.py "减脂今天" --json --no-html
+py -3 backend\service.py --dashboard-json
 ```
 
 ## 数据机制
@@ -170,12 +151,6 @@ python3 backend/service.py --dashboard-json
 上述健康数据、摘要、卡片、备份和 `config.json` 均被 `.gitignore` 排除，不会随普通提交上传到公开仓库。
 
 ## 测试
-
-```bash
-python3 -m unittest discover -s tests -v
-```
-
-Windows：
 
 ```bat
 py -3 -m unittest discover -s tests -v
