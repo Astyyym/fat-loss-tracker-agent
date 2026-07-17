@@ -38,11 +38,12 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.service.daily_summary("2026-07-17")["calories"], payload["today"]["calories"])
         self.assertIn("generated_at", payload)
         self.assertIn("source_files", payload)
+        self.assertEqual(4, payload["settings"]["program_weeks"])
 
     def test_frontend_static_files_served(self):
         with urllib.request.urlopen(self.base + "/") as response:
             page = response.read().decode("utf-8")
-        self.assertIn("四周减脂记录", page)
+        self.assertIn("减脂记录 Agent", page)
         self.assertIn("数据最后更新时间", page)
 
     def test_server_is_read_only(self):

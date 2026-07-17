@@ -1,0 +1,10 @@
+{
+  "program_weeks": 4,
+  "calorie_target_kcal": 1800,
+  "training_day_calorie_max_kcal": 1900,
+  "minimum_recommended_calories_kcal": 1500,
+  "protein_target_g": 130,
+  "protein_min_g": 120,
+  "protein_max_g": 140,
+  "timezone": "Asia/Shanghai"
+}

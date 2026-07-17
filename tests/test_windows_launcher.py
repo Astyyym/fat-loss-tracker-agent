@@ -25,7 +25,7 @@ class WindowsLauncherTests(unittest.TestCase):
         self.assertFalse((ROOT / ".env.example").exists())
         prompt = (ROOT / "prompt.md").read_text(encoding="utf-8")
         self.assertIn("Hermes Gateway", prompt)
-        self.assertIn("不创建、不启动项目专属 Telegram Bot", prompt)
+        self.assertIn("不创建项目专属 Telegram Bot", prompt)
 
 
 if __name__ == "__main__":

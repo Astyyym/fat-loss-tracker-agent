@@ -20,8 +20,16 @@ from zoneinfo import ZoneInfo
 
 TZ_NAME = "Asia/Shanghai"
 TZ = ZoneInfo(TZ_NAME)
-CALORIE_TARGET = 1800.0
-PROTEIN_TARGET = 130.0
+DEFAULT_SETTINGS = {
+    "program_weeks": 4,
+    "calorie_target_kcal": 1800.0,
+    "training_day_calorie_max_kcal": 1900.0,
+    "minimum_recommended_calories_kcal": 1500.0,
+    "protein_target_g": 130.0,
+    "protein_min_g": 120.0,
+    "protein_max_g": 140.0,
+    "timezone": TZ_NAME,
+}
 ALLOWED_TYPES = {"food", "exercise", "body_measurement", "correction", "delete", "restore"}
 CONFIDENCE = {"high", "medium", "low"}
 MEALS = {"早餐", "午餐", "晚餐", "加餐", "放纵餐"}
@@ -81,9 +89,47 @@ class CalorieService:
         self.summary_dir = self.root / "summaries"
         self.cards_dir = self.root / "cards"
         self.backup_dir = self.root / "backups"
+        self.config_path = self.root / "config.json"
+        self.settings = self._load_settings()
+        self.program_weeks = int(self.settings["program_weeks"])
+        self.calorie_target = float(self.settings["calorie_target_kcal"])
+        self.training_calorie_max = float(self.settings["training_day_calorie_max_kcal"])
+        self.minimum_calories = float(self.settings["minimum_recommended_calories_kcal"])
+        self.protein_target = float(self.settings["protein_target_g"])
+        self.protein_min = float(self.settings["protein_min_g"])
+        self.protein_max = float(self.settings["protein_max_g"])
         for directory in (self.data_dir, self.summary_dir, self.cards_dir, self.backup_dir):
             directory.mkdir(parents=True, exist_ok=True)
         self.lock_path = self.data_dir / ".write.lock"
+
+    def _load_settings(self) -> dict[str, Any]:
+        settings = dict(DEFAULT_SETTINGS)
+        if self.config_path.exists():
+            try:
+                loaded = json.loads(self.config_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as exc:
+                raise ServiceError(f"config.json 无法解析：{exc.msg}") from exc
+            if not isinstance(loaded, dict):
+                raise ServiceError("config.json 必须是 JSON 对象")
+            settings.update(loaded)
+        numeric_ranges = {
+            "program_weeks": (1, 104),
+            "calorie_target_kcal": (800, 5000),
+            "training_day_calorie_max_kcal": (800, 6000),
+            "minimum_recommended_calories_kcal": (500, 5000),
+            "protein_target_g": (20, 500),
+            "protein_min_g": (0, 500),
+            "protein_max_g": (20, 600),
+        }
+        for key, (low, high) in numeric_ranges.items():
+            value = settings.get(key)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not low <= float(value) <= high:
+                raise ServiceError(f"config.json 的 {key} 必须在 {low}–{high} 范围内")
+        if settings.get("timezone") != TZ_NAME:
+            raise ServiceError(f"当前仅支持 timezone={TZ_NAME}")
+        if float(settings["protein_min_g"]) > float(settings["protein_target_g"]) or float(settings["protein_target_g"]) > float(settings["protein_max_g"]):
+            raise ServiceError("蛋白质范围必须满足 protein_min_g ≤ protein_target_g ≤ protein_max_g")
+        return settings
 
     def now(self) -> dt.datetime:
         value = self.now_fn()
@@ -576,11 +622,11 @@ class CalorieService:
             view_warning = f"\n\n数据已安全保存，但派生视图生成失败（{type(exc).__name__}）；本次使用 Markdown 回复。"
         if event["entry_type"] == "food":
             summary = self.daily_summary(event["date"])
-            remaining_cal = CALORIE_TARGET - summary["calories"]
-            remaining_pro = PROTEIN_TARGET - summary["protein_g"]
+            remaining_cal = self.calorie_target - summary["calories"]
+            remaining_pro = self.protein_target - summary["protein_g"]
             content = event["items"][0]["name"] if len(event["items"]) == 1 else "、".join(i["name"] for i in event["items"])
             advice = self._advice(summary)
-            md = (f"已记录：{event['date']}\n\n本餐：\n- 餐次：{event['meal_label']}\n- 内容：{content}\n- 估算热量：{event['estimated_total_calories']:g} kcal\n- 估算蛋白质：{event['estimated_total_protein_g']:g} g\n- 置信度：{{'high':'高','medium':'中','low':'低'}}[{event['confidence']}]\n\n今日累计：\n- 热量：{summary['calories']:g} / 1800 kcal（{self._gap(remaining_cal, 'kcal')}）\n- 蛋白质：{summary['protein_g']:g} / 130g（{self._gap(remaining_pro, 'g')}）\n\n下一步建议：\n- {advice}")
+            md = (f"已记录：{event['date']}\n\n本餐：\n- 餐次：{event['meal_label']}\n- 内容：{content}\n- 估算热量：{event['estimated_total_calories']:g} kcal\n- 估算蛋白质：{event['estimated_total_protein_g']:g} g\n- 置信度：{{'high':'高','medium':'中','low':'低'}}[{event['confidence']}]\n\n今日累计：\n- 热量：{summary['calories']:g} / {self.calorie_target:g} kcal（{self._gap(remaining_cal, 'kcal')}）\n- 蛋白质：{summary['protein_g']:g} / {self.protein_target:g}g（{self._gap(remaining_pro, 'g')}）\n\n下一步建议：\n- {advice}")
         elif event["entry_type"] == "exercise":
             md = f"已记录：{event['date']}\n\n- 运动：{event['exercise_type']}\n- 时长：{event['duration_minutes']} 分钟\n- 状态：{self._exercise_status(event)}"
         else:
@@ -612,7 +658,7 @@ class CalorieService:
         protein = sum(float(e["estimated_total_protein_g"]) for e in foods)
         meals: dict[str, list[dict[str, Any]]] = {m: [] for m in ("早餐", "午餐", "晚餐", "加餐", "放纵餐")}
         for food in foods: meals.setdefault(food["meal_label"], []).append(food)
-        return {"date": date, "calories": round(calories, 1), "protein_g": round(protein, 1), "calorie_gap": round(CALORIE_TARGET-calories, 1), "protein_gap": round(PROTEIN_TARGET-protein, 1), "foods": foods, "meals": meals, "exercises": exercises, "exercise_status": self._day_exercise_status(exercises), "weight": self._preferred_measurement(measurements, "weight"), "waist": self._preferred_measurement(measurements, "waist"), "judgement": self._advice({"calories": calories, "protein_g": protein, "foods": foods})}
+        return {"date": date, "calories": round(calories, 1), "protein_g": round(protein, 1), "calorie_gap": round(self.calorie_target-calories, 1), "protein_gap": round(self.protein_target-protein, 1), "foods": foods, "meals": meals, "exercises": exercises, "exercise_status": self._day_exercise_status(exercises), "weight": self._preferred_measurement(measurements, "weight"), "waist": self._preferred_measurement(measurements, "waist"), "judgement": self._advice({"calories": calories, "protein_g": protein, "foods": foods}), "targets": {"calories": self.calorie_target, "training_calorie_max": self.training_calorie_max, "protein_g": self.protein_target, "program_weeks": self.program_weeks}}
 
     @staticmethod
     def _preferred_measurement(records: list[dict[str, Any]], kind: str) -> dict[str, Any] | None:
@@ -632,18 +678,17 @@ class CalorieService:
         if any(e["completion_status"] == "rest" for e in exercises): return "休息"
         return "未完成"
 
-    @staticmethod
-    def _advice(summary: dict[str, Any]) -> str:
+    def _advice(self, summary: dict[str, Any]) -> str:
         if not summary.get("foods"): return "今天还没有饮食记录。"
         cal, pro = summary["calories"], summary["protein_g"]
-        if cal < 1500 and pro < 110: return "后续优先补一份蛋白质和适量主食，不要靠硬饿收尾。"
-        if pro < 120: return "下一餐优先补鸡蛋、牛奶、虾仁、鸡胸或豆腐。"
-        if cal > 1900: return "下一餐清淡即可，不做补偿性绝食。"
+        if cal < self.minimum_calories and pro < min(110, self.protein_min): return "后续优先补一份蛋白质和适量主食，不要靠硬饿收尾。"
+        if pro < self.protein_min: return "下一餐优先补鸡蛋、牛奶、虾仁、鸡胸或豆腐。"
+        if cal > self.training_calorie_max: return "下一餐清淡即可，不做补偿性绝食。"
         return "当前执行稳定，下一餐继续按计划吃。"
 
     def daily_markdown(self, date: str) -> str:
         s = self.daily_summary(date)
-        lines = [f"今日汇总：{date}", "", f"- 总热量：{s['calories']:g} / 1800 kcal", f"- 总蛋白质：{s['protein_g']:g} / 130g"]
+        lines = [f"今日汇总：{date}", "", f"- 总热量：{s['calories']:g} / {self.calorie_target:g} kcal", f"- 总蛋白质：{s['protein_g']:g} / {self.protein_target:g}g"]
         for meal in ("早餐", "午餐", "晚餐", "加餐", "放纵餐"):
             entries = s["meals"].get(meal, [])
             if entries:
@@ -666,8 +711,8 @@ class CalorieService:
             return ServiceResult(False, f"今日卡片生成失败：{exc}\n\nMarkdown 降级不可用，因为源数据未通过安全校验。", "error")
 
     def render_today_html(self, s: dict[str, Any]) -> str:
-        cal_pct = min(100, max(0, s["calories"] / CALORIE_TARGET * 100))
-        pro_pct = min(100, max(0, s["protein_g"] / PROTEIN_TARGET * 100))
+        cal_pct = min(100, max(0, s["calories"] / self.calorie_target * 100))
+        pro_pct = min(100, max(0, s["protein_g"] / self.protein_target * 100))
         cards = []
         for meal in ("早餐", "午餐", "晚餐", "加餐", "放纵餐"):
             entries = s["meals"].get(meal, [])
@@ -681,7 +726,7 @@ class CalorieService:
             cards.append(f'<section class="meal"><header><strong>{meal}</strong><span><b class="cal">{total_c:g} kcal</b> · <b class="pro">{total_p:g}g</b></span></header><div class="details">{"<br>".join(details)}</div></section>')
         empty = '<section class="meal empty">今天还没有饮食记录</section>' if not s["foods"] else ""
         style = "body{margin:0;background:#141414;color:#E0E0E0;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}.card{max-width:420px;margin:0 auto;padding:16px}.label,.details,.foot{color:#9CA3AF;font-size:12px}.title{color:#fff;font-size:22px;font-weight:700}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0 10px}.metric,.meal{background:#1A1A1A;border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:12px}.value{font-size:24px;font-weight:800}.cal{color:#F472B6}.pro{color:#53BDEB}.bar{height:6px;background:#262626;border-radius:999px;overflow:hidden;margin:6px 0}.fill-cal{height:100%;background:#F472B6}.fill-pro{height:100%;background:#53BDEB}.meal{margin:10px 0}.meal header{display:flex;justify-content:space-between;gap:12px}.details{margin-top:8px;line-height:1.6}.foot{margin-top:12px;line-height:1.6}"
-        return f'<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>今日减脂记录</title><style>{style}</style><body><main class="card"><div class="label">TODAY</div><div class="title">{s["date"]}</div><div class="grid"><div class="metric"><div class="label">Calories</div><div class="value cal">{s["calories"]:g}</div><div class="label">/ 1800 kcal · {html.escape(self._gap(s["calorie_gap"], "kcal"))}</div></div><div class="metric"><div class="label">Protein</div><div class="value pro">{s["protein_g"]:g}g</div><div class="label">/ 130g · {html.escape(self._gap(s["protein_gap"], "g"))}</div></div></div><div class="bar"><div class="fill-cal" style="width:{cal_pct:.1f}%"></div></div><div class="bar"><div class="fill-pro" style="width:{pro_pct:.1f}%"></div></div>{empty}{"".join(cards)}<div class="foot">运动：{html.escape(s["exercise_status"])}<br>建议：{html.escape(s["judgement"])}</div></main></body></html>'
+        return f'<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>今日减脂记录</title><style>{style}</style><body><main class="card"><div class="label">TODAY · {self.program_weeks} WEEK PROGRAM</div><div class="title">{s["date"]}</div><div class="grid"><div class="metric"><div class="label">Calories</div><div class="value cal">{s["calories"]:g}</div><div class="label">/ {self.calorie_target:g} kcal · {html.escape(self._gap(s["calorie_gap"], "kcal"))}</div></div><div class="metric"><div class="label">Protein</div><div class="value pro">{s["protein_g"]:g}g</div><div class="label">/ {self.protein_target:g}g · {html.escape(self._gap(s["protein_gap"], "g"))}</div></div></div><div class="bar"><div class="fill-cal" style="width:{cal_pct:.1f}%"></div></div><div class="bar"><div class="fill-pro" style="width:{pro_pct:.1f}%"></div></div>{empty}{"".join(cards)}<div class="foot">运动：{html.escape(s["exercise_status"])}<br>建议：{html.escape(s["judgement"])}</div></main></body></html>'
 
     def recent_days(self, count: int = 7, end: dt.date | None = None) -> list[dict[str, Any]]:
         end = end or self.now().date()
@@ -690,7 +735,7 @@ class CalorieService:
     def render_table_markdown(self, days: list[dict[str, Any]]) -> str:
         lines = ["| 日期 | 热量 | 蛋白质 | 运动 | 体重 | 备注 |", "|---|---:|---:|---|---:|---|"]
         for d in days:
-            note = "未记录饮食" if not d["foods"] else "蛋白不足" if d["protein_g"] < 120 else "热量偏高" if d["calories"] > 1900 else "执行良好"
+            note = "未记录饮食" if not d["foods"] else "蛋白不足" if d["protein_g"] < self.protein_min else "热量偏高" if d["calories"] > self.training_calorie_max else "执行良好"
             weight = f"{d['weight']['value']:g}kg" if d["weight"] else "未记录"
             lines.append(f"| {d['date']} | {d['calories']:g} | {d['protein_g']:g}g | {d['exercise_status']} | {weight} | {note} |")
         return "\n".join(lines)
@@ -714,14 +759,14 @@ class CalorieService:
         waist = f"{w['waists'][0]['value']:g} cm → {w['waists'][-1]['value']:g} cm（{len(w['waists'])} 天样本）" if w["waists"] else "未记录"
         good, problems, adjust = [], [], []
         if w["recorded_days"] >= 5: good.append("记录完整度较好")
-        if w["average_protein_g"] and w["average_protein_g"] >= 120: good.append("平均蛋白质达到可接受范围")
-        if w["average_calories"] and w["average_calories"] <= 1900: good.append("平均摄入控制在目标附近")
+        if w["average_protein_g"] and w["average_protein_g"] >= self.protein_min: good.append("平均蛋白质达到可接受范围")
+        if w["average_calories"] and w["average_calories"] <= self.training_calorie_max: good.append("平均摄入控制在目标附近")
         if w["recorded_days"] < 5: problems.append("饮食记录天数偏少")
-        low_pro = sum(1 for d in w["days"] if d["foods"] and d["protein_g"] < 120)
-        high_cal = sum(1 for d in w["days"] if d["foods"] and d["calories"] > 1900)
+        low_pro = sum(1 for d in w["days"] if d["foods"] and d["protein_g"] < self.protein_min)
+        high_cal = sum(1 for d in w["days"] if d["foods"] and d["calories"] > self.training_calorie_max)
         if low_pro: problems.append(f"蛋白不足 {low_pro} 天")
-        if high_cal: problems.append(f"热量高于 1900 kcal 共 {high_cal} 天")
-        adjust = ["继续记录食材份量和生熟重", "优先让每日蛋白质达到 120–140g", "按计划完成训练，疲劳或不适时不硬压摄入"]
+        if high_cal: problems.append(f"热量高于 {self.training_calorie_max:g} kcal 共 {high_cal} 天")
+        adjust = ["继续记录食材份量和生熟重", f"优先让每日蛋白质达到 {self.protein_min:g}–{self.protein_max:g}g", "按计划完成训练，疲劳或不适时不硬压摄入"]
         return f"本周复盘：{w['start']} 至 {w['end']}\n\n1. 平均每日热量：{avg_c}\n2. 平均每日蛋白质：{avg_p}\n3. 体重变化：{weight}\n4. 腰围变化：{waist}\n5. 运动完成：{w['exercise_completed']} / {w['exercise_planned']} 次\n6. 做得好的地方：{'；'.join(good[:3]) or '有效记录不足，暂不下结论'}\n7. 主要问题：{'；'.join(problems[:3]) or '暂无明显问题'}\n8. 下周调整：\n- " + "\n- ".join(adjust[:3])
 
     def trend_data(self, count: int = 14, end: dt.date | None = None) -> dict[str, Any]:
@@ -767,7 +812,7 @@ class CalorieService:
         try:
             now = self.now(); today = self.daily_summary(now.date().isoformat()); days = self.recent_days(7); trend = self.trend_data(14)
             files = sorted(p.name for p in self.data_dir.glob("[0-9][0-9][0-9][0-9].jsonl"))
-            return {"ok": True, "generated_at": now.isoformat(timespec="seconds"), "source_files": files or ["尚无年度数据文件"], "today": today, "days": days, "trend": trend, "error": None}
+            return {"ok": True, "generated_at": now.isoformat(timespec="seconds"), "source_files": files or ["尚无年度数据文件"], "settings": self.settings, "today": today, "days": days, "trend": trend, "error": None}
         except ServiceError as exc:
             return {"ok": False, "generated_at": self.now().isoformat(timespec="seconds"), "source_files": [], "today": None, "days": [], "trend": None, "error": str(exc)}
 
@@ -800,7 +845,7 @@ class CalorieService:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="四周减脂记录 Agent 后端服务")
+    parser = argparse.ArgumentParser(description="减脂记录 Agent 后端服务")
     parser.add_argument("message", nargs="?", help="要处理的自然语言消息")
     parser.add_argument("--request-id")
     parser.add_argument("--json", action="store_true", help="输出 JSON 结果")

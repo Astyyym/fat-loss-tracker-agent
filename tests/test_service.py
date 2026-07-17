@@ -32,6 +32,30 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(1, len(events))
         self.assertEqual(290, self.s.daily_summary("2026-07-17")["calories"])
 
+    def test_custom_program_weeks_and_targets_from_config(self):
+        (self.root / "config.json").write_text(json.dumps({
+            "program_weeks": 12,
+            "calorie_target_kcal": 2000,
+            "training_day_calorie_max_kcal": 2100,
+            "minimum_recommended_calories_kcal": 1600,
+            "protein_target_g": 150,
+            "protein_min_g": 140,
+            "protein_max_g": 160,
+            "timezone": "Asia/Shanghai",
+        }), encoding="utf-8")
+        service = CalorieService(self.root, now_fn=lambda: self.clock)
+        summary = service.daily_summary("2026-07-17")
+        self.assertEqual(12, service.program_weeks)
+        self.assertEqual(2000, summary["targets"]["calories"])
+        self.assertEqual(150, summary["targets"]["protein_g"])
+        self.assertEqual(2000, summary["calorie_gap"])
+        self.assertIn("12 WEEK PROGRAM", service.today_result().data["html"])
+
+    def test_invalid_config_is_rejected(self):
+        (self.root / "config.json").write_text('{"program_weeks": 0}', encoding="utf-8")
+        with self.assertRaises(ServiceError):
+            CalorieService(self.root, now_fn=lambda: self.clock)
+
     def test_multi_line_message_splits_into_independent_events_and_is_idempotent(self):
         first = self.s.handle_message("早餐 标准早餐A\n体重 72.4kg，早起空腹", "batch-1")
         second = self.s.handle_message("早餐 标准早餐A\n体重 72.4kg，早起空腹", "batch-1")

@@ -5,6 +5,7 @@ __pycache__/
 # Secrets / local environment
 .env
 .env.*
+config.json
 
 # Runtime health data and derived private views
 data/*.jsonl
