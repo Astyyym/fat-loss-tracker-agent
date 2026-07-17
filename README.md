@@ -168,3 +168,15 @@ summaries/ cards/        本地派生视图（Git 忽略）
 backups/                 本地滚动备份（Git 忽略）
 tests/                   自动化测试
 ```
+
+## 参考项目与链接
+
+- [NousResearch/hermes-agent：Hermes Agent 官方仓库](https://github.com/NousResearch/hermes-agent)
+- [Hermes Agent 官方文档](https://hermes-agent.nousresearch.com/docs/)
+- [Astyyym/fat-loss-tracker-agent：本项目 GitHub 仓库](https://github.com/Astyyym/fat-loss-tracker-agent)
+
+本项目的 Hermes Gateway 接入与 Skill 路由方式参考了 Hermes Agent 的工具、技能和消息平台架构；减脂记录的数据模型、JSONL 事件机制和本地仪表盘由本项目实现。
+
+## 开源许可
+
+本项目采用 [MIT License](LICENSE) 开源。你可以使用、复制、修改、合并、发布和分发本项目，但需保留原始版权及许可声明。
