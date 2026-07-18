@@ -241,7 +241,38 @@ class ServiceTests(unittest.TestCase):
         event.update({"date": "2026-07-17", "time": "10:00", "measurement_type": "weight", "value": -1, "unit": "kg", "condition": "未说明"})
         with self.assertRaises(ServiceError):
             self.s.append_event(event)
+    def test_profile_uses_weeks_or_date_and_never_rewrites_events(self):
+        created = self.s.handle_message("早餐 标准早餐A", "before-profile")
+        before = (self.root / "data/2026.jsonl").read_bytes()
+        saved = self.s.save_profile({"profile": {"height_cm": 172, "current_weight_kg": 75, "target_weight_kg": 68}, "plan": {"program_weeks": 8, "timezone": TZ_NAME}})
+        self.assertFalse(saved["warning"])
+        self.assertTrue((self.root / "profile.json").exists())
+        plan = saved["profile"]["plan"]
+        self.assertEqual(("2026-07-17", "2026-09-11", 8), (plan["start_date"], plan["end_date"], plan["program_weeks"]))
+        self.assertEqual(before, (self.root / "data/2026.jsonl").read_bytes())
+        self.assertEqual(created.event_ids[0], self.s.read_events(2026)[0]["id"])
+        self.clock = dt.datetime(2026, 7, 17, 12, 30, tzinfo=TZ)
+        date_saved = self.s.save_profile({"profile": {"height_cm": 172, "current_weight_kg": 75, "target_weight_kg": 70}, "plan": {"end_date": "2026-08-14", "timezone": TZ_NAME}})
+        self.assertEqual(4, date_saved["profile"]["plan"]["program_weeks"])
+        self.assertEqual(before, (self.root / "data/2026.jsonl").read_bytes())
 
+    def test_profile_rejects_invalid_or_unsafe_plans(self):
+        base = {"profile": {"height_cm": 172, "current_weight_kg": 75, "target_weight_kg": 68}, "plan": {"timezone": TZ_NAME}}
+        for plan in ({"program_weeks": 0}, {"program_weeks": 8, "end_date": "2026-09-01"}, {"end_date": "2026-07-17"}):
+            with self.subTest(plan=plan), self.assertRaises(ServiceError):
+                self.s.save_profile({"profile": base["profile"], "plan": {"timezone": TZ_NAME, **plan}})
+        fast = self.s.save_profile({"profile": {"height_cm": 172, "current_weight_kg": 100, "target_weight_kg": 60}, "plan": {"program_weeks": 4, "timezone": TZ_NAME}})
+        self.assertTrue(fast["warning"])
 
-if __name__ == "__main__":
-    unittest.main()
+    def test_profile_corruption_is_explicit(self):
+        (self.root / "profile.json").write_text("{broken", encoding="utf-8")
+        with self.assertRaises(ServiceError) as ctx:
+            CalorieService(self.root, now_fn=lambda: self.clock)
+        self.assertIn("profile.json 无法解析", str(ctx.exception))
+
+    def test_dashboard_without_profile_does_not_expose_defaults(self):
+        payload = self.s.dashboard_payload()
+        self.assertTrue(payload["ok"])
+        self.assertFalse(payload["configured"])
+        self.assertIsNone(payload["settings"])
+        self.assertIsNone(payload["today"])

@@ -20,6 +20,7 @@ class ServerTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         now = dt.datetime(2026, 7, 17, 8, 0, tzinfo=TZ)
         self.service = CalorieService(Path(self.tmp.name), now_fn=lambda: now)
+        self.service.save_profile({"profile": {"height_cm": 172, "current_weight_kg": 75, "target_weight_kg": 68}, "plan": {"program_weeks": 8, "timezone": TZ_NAME}})
         self.service.handle_message("早餐 标准早餐A", "1")
         handler = type("TestHandler", (DashboardHandler,), {"service": self.service})
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
@@ -38,7 +39,7 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.service.daily_summary("2026-07-17")["calories"], payload["today"]["calories"])
         self.assertIn("generated_at", payload)
         self.assertIn("source_files", payload)
-        self.assertEqual(4, payload["settings"]["program_weeks"])
+        self.assertEqual(8, payload["settings"]["program_weeks"])
 
     def test_frontend_static_files_served(self):
         with urllib.request.urlopen(self.base + "/") as response:
@@ -51,6 +52,19 @@ class ServerTests(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             urllib.request.urlopen(request)
         self.assertEqual(405, ctx.exception.code)
+
+    def test_profile_api_creates_profile_and_rejects_invalid_input(self):
+        with urllib.request.urlopen(self.base + "/api/profile") as response:
+            initial = json.loads(response.read().decode("utf-8"))
+        self.assertTrue(initial["configured"])
+        request = urllib.request.Request(self.base + "/api/profile", data=json.dumps({"profile": {"height_cm": 172, "current_weight_kg": 75, "target_weight_kg": 68}, "plan": {"program_weeks": 8, "timezone": TZ_NAME}}).encode(), method="POST", headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(request) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        self.assertTrue(payload["ok"])
+        bad = urllib.request.Request(self.base + "/api/profile", data=b"{}", method="POST", headers={"Content-Type": "application/json"})
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(bad)
+        self.assertEqual(400, ctx.exception.code)
 
     def test_frontend_has_no_external_or_localstorage_dependencies(self):
         html_css = "\n".join((FRONTEND / name).read_text(encoding="utf-8") for name in ("index.html", "styles.css"))

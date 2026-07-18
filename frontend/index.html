@@ -8,32 +8,34 @@
 </head>
 <body>
   <header class="topbar">
-    <div><p class="eyebrow">LOCAL DASHBOARD</p><h1>减脂记录 Agent</h1><p id="program-length" class="program-length">周期：—</p></div>
-    <button id="refresh" type="button">刷新数据</button>
+    <div><p class="eyebrow">LOCAL DASHBOARD</p><h1>减脂记录 Agent</h1><p id="program-length" class="program-length">本地单用户记录</p></div>
+    <div class="actions"><button id="edit-profile" type="button" hidden>修改个人目标</button><button id="refresh" type="button">刷新数据</button></div>
   </header>
   <main>
-    <section id="status" class="status" aria-live="polite">正在读取后端汇总…</section>
-    <section class="today-section">
-      <h2>今日</h2>
-      <div class="metrics">
-        <article><span>热量</span><strong id="calories">—</strong><small id="calorie-gap">/ 1800 kcal</small></article>
-        <article><span>蛋白质</span><strong id="protein">—</strong><small id="protein-gap">/ 130g</small></article>
-        <article><span>运动</span><strong id="exercise">—</strong><small id="today-date">—</small></article>
-      </div>
-      <div id="meals" class="meals"></div>
-      <p id="judgement" class="judgement"></p>
+    <section id="status" class="status" aria-live="polite">正在读取本地状态…</section>
+    <section id="onboarding" class="onboarding" hidden>
+      <h2>先建立你的减脂档案</h2>
+      <p>档案只保存在本机 <code>profile.json</code>，不会使用浏览器 LocalStorage。热量与蛋白质是估算建议，提交前可以手动调整。</p>
+      <form id="profile-form">
+        <div class="form-grid">
+          <label>身高（cm）<input name="height_cm" type="number" min="80" max="250" step="0.1" required></label>
+          <label>当前体重（kg）<input name="current_weight_kg" type="number" min="25" max="300" step="0.1" required></label>
+          <label>目标体重（kg）<input name="target_weight_kg" type="number" min="25" max="300" step="0.1" required></label>
+          <label>年龄（可选）<input name="age" type="number" min="14" max="120" step="1"></label>
+          <label>生理性别（可选）<select name="sex"><option value="unspecified">不提供</option><option value="female">女性</option><option value="male">男性</option></select></label>
+          <label>活动水平（可选）<select name="activity_level"><option value="">不提供</option><option value="low">低</option><option value="light">轻度</option><option value="moderate">中等</option><option value="high">高</option></select></label>
+          <label>每周训练次数（可选）<input name="weekly_training_frequency" type="number" min="0" max="14" step="1"></label>
+        </div>
+        <fieldset><legend>计划时间（二选一）</legend><label><input type="radio" name="plan_mode" value="weeks" checked> 计划周数</label><input name="program_weeks" type="number" min="1" max="104" step="1" value="8"><label><input type="radio" name="plan_mode" value="date"> 目标日期</label><input name="end_date" type="date" disabled></fieldset>
+        <details><summary>调整估算建议（可选）</summary><div class="form-grid"><label>热量目标 kcal<input name="calorie_target_kcal" type="number" min="800" max="5000"></label><label>蛋白质目标 g<input name="protein_target_g" type="number" min="20" max="500"></label></div></details>
+        <p class="hint">目标变化过快时，系统会提示你放慢计划；这不是医疗建议。</p><button type="submit">保存档案并进入仪表盘</button>
+      </form>
     </section>
-    <section>
-      <h2>最近 7 天</h2>
-      <div class="table-wrap"><table><thead><tr><th>日期</th><th>热量</th><th>蛋白质</th><th>运动</th><th>体重</th><th>状态</th></tr></thead><tbody id="week-table"></tbody></table></div>
-    </section>
-    <section>
-      <h2>最近 14 天趋势</h2>
-      <div class="charts">
-        <article><h3>热量 / kcal</h3><svg id="calorie-chart" viewBox="0 0 640 220" role="img"></svg></article>
-        <article><h3>蛋白质 / g</h3><svg id="protein-chart" viewBox="0 0 640 220" role="img"></svg></article>
-        <article><h3>体重 7 天移动平均 / kg</h3><svg id="weight-chart" viewBox="0 0 640 220" role="img"></svg></article>
-      </div>
+    <section id="dashboard" hidden>
+      <p class="current-plan">当前计划口径：修改目标不会改写历史 JSONL；旧记录的达标比较会按当前计划重新计算。</p>
+      <section class="today-section"><h2>今日</h2><div class="metrics"><article><span>热量</span><strong id="calories">—</strong><small id="calorie-gap">—</small></article><article><span>蛋白质</span><strong id="protein">—</strong><small id="protein-gap">—</small></article><article><span>运动</span><strong id="exercise">—</strong><small id="today-date">—</small></article></div><div id="meals" class="meals"></div><p id="judgement" class="judgement"></p></section>
+      <section><h2>最近 7 天</h2><div class="table-wrap"><table><thead><tr><th>日期</th><th>热量</th><th>蛋白质</th><th>运动</th><th>体重</th><th>状态</th></tr></thead><tbody id="week-table"></tbody></table></div></section>
+      <section><h2>最近 14 天趋势</h2><div class="charts"><article><h3>热量 / kcal</h3><svg id="calorie-chart" viewBox="0 0 640 220" role="img"></svg></article><article><h3>蛋白质 / g</h3><svg id="protein-chart" viewBox="0 0 640 220" role="img"></svg></article><article><h3>体重 7 天移动平均 / kg</h3><svg id="weight-chart" viewBox="0 0 640 220" role="img"></svg></article></div></section>
     </section>
   </main>
   <footer><span id="updated">数据最后更新时间：—</span><span id="source">当前数据源文件：—</span></footer>

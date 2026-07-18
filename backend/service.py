@@ -89,6 +89,8 @@ class CalorieService:
         self.cards_dir = self.root / "cards"
         self.backup_dir = self.root / "backups"
         self.config_path = self.root / "config.json"
+        self.profile_path = self.root / "profile.json"
+        self.profile = self._load_profile()
         self.settings = self._load_settings()
         self.program_weeks = int(self.settings["program_weeks"])
         self.calorie_target = float(self.settings["calorie_target_kcal"])
@@ -101,7 +103,158 @@ class CalorieService:
             directory.mkdir(parents=True, exist_ok=True)
         self.lock_path = self.data_dir / ".write.lock"
 
+    def _load_profile(self) -> dict[str, Any] | None:
+        if not self.profile_path.exists():
+            return None
+        try:
+            profile = json.loads(self.profile_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ServiceError(f"profile.json 无法解析：{exc.msg}") from exc
+        self.validate_profile(profile)
+        return profile
+
+    @staticmethod
+    def _number(value: Any, low: float, high: float, name: str) -> float:
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not low <= float(value) <= high:
+            raise ServiceError(f"{name}必须在 {low}–{high} 范围内")
+        return float(value)
+
+    def validate_profile(self, profile: dict[str, Any]) -> None:
+        if not isinstance(profile, dict) or profile.get("schema_version") != 1:
+            raise ServiceError("profile.json 缺少受支持的 schema_version")
+        personal = profile.get("profile")
+        plan = profile.get("plan")
+        if not isinstance(personal, dict) or not isinstance(plan, dict):
+            raise ServiceError("profile.json 必须包含 profile 和 plan 对象")
+        self._number(personal.get("height_cm"), 80, 250, "身高")
+        self._number(personal.get("current_weight_kg"), 25, 300, "当前体重")
+        self._number(personal.get("target_weight_kg"), 25, 300, "目标体重")
+        if personal.get("age") is not None:
+            self._number(personal["age"], 14, 120, "年龄")
+        if personal.get("sex") not in {None, "female", "male", "unspecified"}:
+            raise ServiceError("生理性别无效")
+        if personal.get("activity_level") not in {None, "low", "light", "moderate", "high"}:
+            raise ServiceError("活动水平无效")
+        if personal.get("weekly_training_frequency") is not None:
+            self._number(personal["weekly_training_frequency"], 0, 14, "每周训练频率")
+        try:
+            start = dt.date.fromisoformat(str(plan["start_date"]))
+            end = dt.date.fromisoformat(str(plan["end_date"]))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ServiceError("计划起止日期必须为 YYYY-MM-DD") from exc
+        if end <= start:
+            raise ServiceError("目标日期必须晚于计划开始日期")
+        weeks = self._number(plan.get("program_weeks"), 1, 104, "计划周数")
+        expected = max(1, (end - start).days // 7 + (1 if (end - start).days % 7 else 0))
+        if int(weeks) != expected:
+            raise ServiceError("计划周数与起止日期不一致")
+        for key, low, high in (("calorie_target_kcal", 800, 5000), ("training_day_calorie_max_kcal", 800, 6000), ("minimum_recommended_calories_kcal", 500, 5000), ("protein_target_g", 20, 500), ("protein_min_g", 0, 500), ("protein_max_g", 20, 600)):
+            self._number(plan.get(key), low, high, key)
+        if not float(plan["protein_min_g"]) <= float(plan["protein_target_g"]) <= float(plan["protein_max_g"]):
+            raise ServiceError("蛋白质范围必须满足 protein_min_g ≤ protein_target_g ≤ protein_max_g")
+        if plan.get("timezone") != TZ_NAME:
+            raise ServiceError(f"当前仅支持 timezone={TZ_NAME}")
+
+    def _legacy_settings(self) -> dict[str, Any]:
+        settings = dict(DEFAULT_SETTINGS)
+        if not self.config_path.exists():
+            return settings
+        try:
+            loaded = json.loads(self.config_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ServiceError(f"config.json 无法解析：{exc.msg}") from exc
+        if not isinstance(loaded, dict):
+            raise ServiceError("config.json 必须是 JSON 对象")
+        settings.update(loaded)
+        return settings
+
     def _load_settings(self) -> dict[str, Any]:
+        if self.profile:
+            return dict(self.profile["plan"])
+        settings = self._legacy_settings()
+        numeric_ranges = {
+            "program_weeks": (1, 104),
+            "calorie_target_kcal": (800, 5000),
+            "training_day_calorie_max_kcal": (800, 6000),
+            "minimum_recommended_calories_kcal": (500, 5000),
+            "protein_target_g": (20, 500),
+            "protein_min_g": (0, 500),
+            "protein_max_g": (20, 600),
+        }
+        for key, (low, high) in numeric_ranges.items():
+            self._number(settings.get(key), low, high, key)
+        if settings.get("timezone") != TZ_NAME:
+            raise ServiceError(f"当前仅支持 timezone={TZ_NAME}")
+        if float(settings["protein_min_g"]) > float(settings["protein_target_g"]) or float(settings["protein_target_g"]) > float(settings["protein_max_g"]):
+            raise ServiceError("蛋白质范围必须满足 protein_min_g ≤ protein_target_g ≤ protein_max_g")
+        return settings
+
+    def profile_status(self) -> dict[str, Any]:
+        if self.profile:
+            return {"configured": True, "profile": self.profile}
+        return {"configured": False, "legacy_config_detected": self.config_path.exists()}
+
+    def _suggest_targets(self, current: float, target: float, weeks: int) -> tuple[dict[str, float], bool]:
+        weekly_change = abs(current - target) / weeks
+        warning = weekly_change > 1.0
+        calories = 1800.0 if warning else max(1200.0, min(2600.0, 2000.0 - weekly_change * 350.0))
+        protein = max(80.0, min(220.0, round(current * 1.6, 0)))
+        return {"calorie_target_kcal": calories, "training_day_calorie_max_kcal": calories + 100, "minimum_recommended_calories_kcal": min(calories, 1500.0), "protein_target_g": protein, "protein_min_g": max(0.0, protein - 10), "protein_max_g": protein + 10}, warning
+
+    def build_profile(self, payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+        if not isinstance(payload, dict):
+            raise ServiceError("档案请求必须是 JSON 对象")
+        personal = payload.get("profile") if isinstance(payload.get("profile"), dict) else payload
+        plan_input = payload.get("plan") if isinstance(payload.get("plan"), dict) else payload
+        height = self._number(personal.get("height_cm"), 80, 250, "身高")
+        current = self._number(personal.get("current_weight_kg"), 25, 300, "当前体重")
+        target = self._number(personal.get("target_weight_kg"), 25, 300, "目标体重")
+        timezone = str(plan_input.get("timezone") or TZ_NAME)
+        if timezone != TZ_NAME:
+            raise ServiceError(f"当前仅支持 timezone={TZ_NAME}")
+        start = self.now().date()
+        end_raw, weeks_raw = plan_input.get("end_date"), plan_input.get("program_weeks")
+        if bool(end_raw) == bool(weeks_raw):
+            raise ServiceError("请在目标日期和计划周数中二选一")
+        if end_raw:
+            try: end = dt.date.fromisoformat(str(end_raw))
+            except ValueError as exc: raise ServiceError("目标日期必须为 YYYY-MM-DD") from exc
+            if end <= start: raise ServiceError("目标日期必须晚于今天")
+            weeks = max(1, (end - start).days // 7 + (1 if (end - start).days % 7 else 0))
+        else:
+            weeks = int(self._number(weeks_raw, 1, 104, "计划周数"))
+            end = start + dt.timedelta(days=weeks * 7)
+        suggestions, warning = self._suggest_targets(current, target, weeks)
+        plan = {"start_date": start.isoformat(), "end_date": end.isoformat(), "program_weeks": weeks, "timezone": timezone, **suggestions}
+        for key in suggestions:
+            if key in plan_input and plan_input[key] is not None:
+                plan[key] = self._number(plan_input[key], 500 if key == "minimum_recommended_calories_kcal" else 0, 6000 if "calorie" in key else 600, key)
+        if plan["protein_min_g"] > plan["protein_target_g"] or plan["protein_target_g"] > plan["protein_max_g"]:
+            raise ServiceError("蛋白质范围必须满足 protein_min_g ≤ protein_target_g ≤ protein_max_g")
+        profile = {"schema_version": 1, "profile": {"height_cm": height, "current_weight_kg": current, "target_weight_kg": target, "age": personal.get("age"), "sex": personal.get("sex", "unspecified"), "activity_level": personal.get("activity_level"), "weekly_training_frequency": personal.get("weekly_training_frequency")}, "plan": plan}
+        self.validate_profile(profile)
+        return profile, warning
+
+    def save_profile(self, payload: dict[str, Any]) -> dict[str, Any]:
+        profile, warning = self.build_profile(payload)
+        if self.profile_path.exists():
+            stamp = self.now().strftime("%Y%m%d-%H%M%S")
+            backup = self.backup_dir / "profiles" / f"profile-{stamp}.json"
+            backup.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(self.profile_path, backup)
+        self._atomic_write_derived(self.profile_path, json.dumps(profile, ensure_ascii=False, indent=2) + "\n")
+        self.profile = profile
+        self.settings = dict(profile["plan"])
+        self.program_weeks = int(self.settings["program_weeks"])
+        self.calorie_target = float(self.settings["calorie_target_kcal"])
+        self.training_calorie_max = float(self.settings["training_day_calorie_max_kcal"])
+        self.minimum_calories = float(self.settings["minimum_recommended_calories_kcal"])
+        self.protein_target = float(self.settings["protein_target_g"])
+        self.protein_min = float(self.settings["protein_min_g"])
+        self.protein_max = float(self.settings["protein_max_g"])
+        return {"profile": profile, "warning": warning}
+
+    def _load_settings_legacy_removed(self) -> dict[str, Any]:
         settings = dict(DEFAULT_SETTINGS)
         if self.config_path.exists():
             try:
@@ -808,12 +961,14 @@ class CalorieService:
             if os.path.exists(temp): os.unlink(temp)
 
     def dashboard_payload(self) -> dict[str, Any]:
+        if not self.profile:
+            return {"ok": True, "configured": False, "generated_at": self.now().isoformat(timespec="seconds"), "source_files": [], "settings": None, "today": None, "days": [], "trend": None, "profile_status": self.profile_status(), "error": None}
         try:
             now = self.now(); today = self.daily_summary(now.date().isoformat()); days = self.recent_days(7); trend = self.trend_data(14)
             files = sorted(p.name for p in self.data_dir.glob("[0-9][0-9][0-9][0-9].jsonl"))
-            return {"ok": True, "generated_at": now.isoformat(timespec="seconds"), "source_files": files or ["尚无年度数据文件"], "settings": self.settings, "today": today, "days": days, "trend": trend, "error": None}
+            return {"ok": True, "configured": True, "generated_at": now.isoformat(timespec="seconds"), "source_files": files or ["尚无年度数据文件"], "settings": self.settings, "profile": self.profile, "today": today, "days": days, "trend": trend, "profile_status": self.profile_status(), "error": None}
         except ServiceError as exc:
-            return {"ok": False, "generated_at": self.now().isoformat(timespec="seconds"), "source_files": [], "today": None, "days": [], "trend": None, "error": str(exc)}
+            return {"ok": False, "configured": bool(self.profile), "generated_at": self.now().isoformat(timespec="seconds"), "source_files": [], "today": None, "days": [], "trend": None, "error": str(exc)}
 
     def restore_backup(self, backup_path: str | Path) -> str:
         backup = Path(backup_path).resolve()
