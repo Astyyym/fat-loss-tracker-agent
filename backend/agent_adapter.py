@@ -11,6 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from backend.image_candidates import CandidateStore
 from backend.service import CalorieService, ServiceError, TZ_NAME
 
 
@@ -46,6 +47,15 @@ def normalize_request(payload: Any) -> dict[str, Any]:
 
 def process_payload(service: CalorieService, payload: Any) -> dict[str, Any]:
     try:
+        if not isinstance(payload, dict):
+            raise ServiceError("请求必须是 JSON 对象")
+        operation = payload.get("operation", "message")
+        if operation == "candidate_submit":
+            stored = CandidateStore(service).submit(payload.get("candidate"), payload.get("request_id"))
+            return {"ok": True, "markdown": "已生成候选，等待用户确认或修正后才会写入记录。", "event_ids": [], "duplicate": stored["duplicate"], "error": None, "kind": "candidate_pending", "pending_id": stored["pending_id"], "candidate": stored["candidate"]}
+        if operation == "candidate_confirm":
+            result = CandidateStore(service).confirm(payload.get("pending_id", ""), payload.get("corrections"), payload.get("request_id"))
+            return {"ok": True, "markdown": "已按确认后的候选写入饮食记录。", "event_ids": result["event_ids"], "duplicate": result["duplicate"], "error": None, "kind": "food"}
         request = normalize_request(payload)
         result = service.handle_message(request["message"], request["request_id"], html_enabled=False)
         return {"ok": result.ok, "markdown": result.markdown, "event_ids": result.event_ids or [], "duplicate": result.duplicate, "error": None if result.ok else result.markdown, "kind": result.kind}
