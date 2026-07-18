@@ -12,32 +12,15 @@
 - 面向 Windows 本地运行，提供一键启动和停止脚本
 - localhost 只读仪表盘，无 npm、数据库或外部 CDN
 
-## 配置周期和目标
+## 首次设置与本地档案
 
-复制示例配置：
+首次打开仪表盘会显示设置向导。填写身高、当前体重、目标体重，并在**目标日期**与**计划周数**中二选一；系统将规范化保存计划起止日期和周数。
 
-```bat
-copy config.example.json config.json
-```
+真实档案写入本机 `profile.json`，已被 Git 忽略。公开仓库只提供 [profile.example.json](profile.example.json)。热量与蛋白质属于估算建议，允许手动调整，不构成医疗建议。
 
-编辑 `config.json`：
+旧版 `config.json` 仅作为一次性兼容来源读取可复用目标字段；它不会跳过首次设置。档案损坏时不会回退到默认目标，页面会明确报错。
 
-```json
-{
-  "program_weeks": 8,
-  "calorie_target_kcal": 1800,
-  "training_day_calorie_max_kcal": 1900,
-  "minimum_recommended_calories_kcal": 1500,
-  "protein_target_g": 130,
-  "protein_min_g": 120,
-  "protein_max_g": 140,
-  "timezone": "Asia/Shanghai"
-}
-```
-
-`program_weeks` 可设置为 1–104。`config.json` 属于本地个人配置，已被 Git 忽略；公开仓库只包含 `config.example.json`。
-
-不创建 `config.json` 时使用示例中的默认值。
+修改个人目标不会改写历史 JSONL；仪表盘对历史记录的达标比较使用当前计划口径。
 
 ## 正式源码位置与环境
 
@@ -67,6 +50,18 @@ py -3 backend\service.py "<用户原文>" --json --no-html
 ```
 
 项目本身不包含第二个 Telegram Bot，也不要求重复配置 Telegram Token 或 chat ID。Telegram 的连接和授权由现有 Hermes Gateway 负责。
+
+### 通用 Agent / IM Gateway 协议
+
+任何平台的 Gateway 都可通过 stdio JSON Lines 调用本地适配器：
+
+```bat
+py -3 backend\agent_adapter.py
+```
+
+每行传入一个 JSON 请求，核心字段是 `message`、可选稳定 `request_id`、`timezone` 和最小化 `attachments` 元数据。返回 `ok`、`markdown`、`event_ids`、`duplicate`、`error`、`kind`。适配器不保存 Token、chat ID、原始平台消息或图片二进制。
+
+图片由用户已有的多模态 Agent 识别为候选结果后，可使用 `candidate_submit` 暂存候选；必须经 `candidate_confirm` 明确确认或修正后，才会写入饮食事件。项目不绑定任何视觉模型供应商。
 
 ### 安装附带的 Hermes Skill
 
