@@ -48,11 +48,7 @@ for ($i = 0; $i -lt 60; $i++) {
 }
 
 if (-not $ready) {
-    $output = if (Test-Path $serverLog) { Get-Content $serverLog -Raw } else { '' }
-    $errors = if (Test-Path $serverErrorLog) { Get-Content $serverErrorLog -Raw } else { '' }
-    $detail = ($output + "`n" + $errors).Trim()
-    if (-not $detail) { $detail = 'No server log was created.' }
-    throw "Dashboard failed to start. $detail"
+    throw "Dashboard failed to start. Review runtime\logs\dashboard-server.log and dashboard-server-error.log locally."
 }
 
 Open-Dashboard

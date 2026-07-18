@@ -106,6 +106,14 @@ xcopy /E /I skills\fat-loss-tracker "%USERPROFILE%\.hermes\skills\productivity\f
 
 要求安装 Python 3.11 或更高版本。
 
+首次使用或排查环境前，可双击：
+
+```text
+WindowsSelfCheck.bat
+```
+
+自检只检查 Python、项目写权限、8765 端口、私有档案状态和已运行服务的健康接口；不会写入任何健康记录，也不会启动或关闭服务。
+
 启动器会把本地诊断日志写入 `runtime/logs/`。该目录已被 Git 忽略，不会上传到公开仓库。
 
 > Windows 脚本结构、服务启动、接口访问、停止和端口释放已经完成验证；不同 Windows 机器上的 Python 安装状态仍可能影响启动。

@@ -6,6 +6,7 @@ __pycache__/
 .env
 .env.*
 config.json
+profile.json
 
 # Runtime health data and derived private views
 data/*.jsonl
